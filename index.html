@@ -74,45 +74,52 @@ label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px
   <h1><i class="ti ti-shield-check" style="font-size:20px; vertical-align:-2px; margin-right:6px;"></i>리스크 관리 대시보드</h1>
   <p class="subtitle">윌리엄 오닐 2% 룰 · 손익비 1:3 · 손절/익절은 증거금 ROI 기준 (레버리지 자동 환산)</p>
 
-  <div class="card">
-    <div style="font-size:13px; font-weight:600; color:var(--sub); margin-bottom:12px;"><i class="ti ti-settings" style="font-size:16px; vertical-align:-2px; margin-right:6px;"></i>기본 셋업</div>
-    <div class="grid">
-      <div>
-        <label>총자본 (USD)</label>
-        <input type="number" id="g-capital" value="654" min="0">
+  <div class="tabs" id="page-tabs" style="margin-bottom:20px;"></div>
+
+  <div id="page-calc">
+    <div class="card">
+      <div style="font-size:13px; font-weight:600; color:var(--sub); margin-bottom:12px;"><i class="ti ti-settings" style="font-size:16px; vertical-align:-2px; margin-right:6px;"></i>기본 셋업</div>
+      <div class="grid">
+        <div>
+          <label>총자본 (USD)</label>
+          <input type="number" id="g-capital" value="654" min="0">
+        </div>
+        <div>
+          <label>1종목 최대 손실률 (%)</label>
+          <select id="g-risk">
+            <option value="1">1% (보수적)</option>
+            <option value="1.5">1.5%</option>
+            <option value="2" selected>2% (표준)</option>
+          </select>
+        </div>
+        <div>
+          <label>코인 손절 · ROI 기준 (%)</label>
+          <select id="g-stop">
+            <option value="2">-2% (익절 +6%)</option>
+            <option value="4">-4% (익절 +12%)</option>
+            <option value="7">-7% (익절 +21%)</option>
+            <option value="7.5">-7.5% (익절 +22.5%)</option>
+            <option value="8" selected>-8% (익절 +24%)</option>
+          </select>
+        </div>
+        <div>
+          <label>손익비 (1 : R)</label>
+          <input type="number" id="g-rr" value="3" min="1" step="0.5">
+        </div>
       </div>
-      <div>
-        <label>1종목 최대 손실률 (%)</label>
-        <select id="g-risk">
-          <option value="1">1% (보수적)</option>
-          <option value="1.5">1.5%</option>
-          <option value="2" selected>2% (표준)</option>
-        </select>
-      </div>
-      <div>
-        <label>코인 손절 · ROI 기준 (%)</label>
-        <select id="g-stop">
-          <option value="2">-2% (익절 +6%)</option>
-          <option value="4">-4% (익절 +12%)</option>
-          <option value="7">-7% (익절 +21%)</option>
-          <option value="7.5">-7.5% (익절 +22.5%)</option>
-          <option value="8" selected>-8% (익절 +24%)</option>
-        </select>
-      </div>
-      <div>
-        <label>손익비 (1 : R)</label>
-        <input type="number" id="g-rr" value="3" min="1" step="0.5">
-      </div>
+      <p class="hint">코인 손절·익절 %는 내 증거금 기준 손익(ROI)입니다. 레버리지를 나눠 실제 가격으로 자동 환산됩니다. 해외선물은 가격 변동 기준입니다.</p>
     </div>
-    <p class="hint">코인 손절·익절 %는 내 증거금 기준 손익(ROI)입니다. 레버리지를 나눠 실제 가격으로 자동 환산됩니다. 해외선물은 가격 변동 기준입니다.</p>
+
+    <div class="tabs" id="tabs"></div>
+    <div class="mcards" id="summary"></div>
+    <div id="positions"></div>
+    <div class="addbar" id="add-bar"></div>
   </div>
 
-  <div class="tabs" id="tabs"></div>
-  <div class="mcards" id="summary"></div>
-  <div id="positions"></div>
-  <div class="addbar" id="add-bar"></div>
+  <div id="page-trades" style="display:none;"></div>
+  <div id="page-analysis" style="display:none;"></div>
 
-  <p class="footer">입력값은 이 브라우저에만 저장됩니다 · 개시증거금은 대략값이므로 사용 중인 증권사 값으로 수정하세요 · v1.4</p>
+  <p class="footer">입력값은 이 브라우저에만 저장됩니다 · 개시증거금은 대략값이므로 사용 중인 증권사 값으로 수정하세요 · v1.5</p>
 </div>
 
 <script>
@@ -459,7 +466,319 @@ document.addEventListener("click", e => {
   }
 });
 
+// ===== 실거래 연동 (Bitget API via Cloudflare Worker) =====
+const API_BASE = "https://risk-dashboard-api.techman4531.workers.dev";
+const PW_KEY = "oneil-dash-pw";
+const PAGE_TABS = [
+  { id: "calc", n: "계산기", icon: "ti-calculator" },
+  { id: "trades", n: "실거래 내역", icon: "ti-list-details" },
+  { id: "analysis", n: "오닐 분석", icon: "ti-chart-histogram" }
+];
+let currentPage = "calc";
+let liveData = { positions: null, history: null, account: null, loaded: false, loading: false, error: null };
+
+function getPW() { try { return localStorage.getItem(PW_KEY) || ""; } catch (e) { return ""; } }
+function setPW(v) { try { localStorage.setItem(PW_KEY, v); } catch (e) {} }
+function clearPW() { try { localStorage.removeItem(PW_KEY); } catch (e) {} }
+
+async function fetchApi(path) {
+  const res = await fetch(API_BASE + path, { headers: { "X-Dashboard-Password": getPW() } });
+  if (res.status === 401) { clearPW(); throw new Error("unauthorized"); }
+  let data;
+  try { data = await res.json(); } catch (e) { throw new Error("서버 응답을 읽을 수 없습니다 (HTTP " + res.status + ")"); }
+  if (!res.ok) throw new Error(data.msg || data.error || ("요청 실패 (HTTP " + res.status + ")"));
+  if (data.code && data.code !== "00000" && !data.ok) throw new Error(data.msg || "api error");
+  return data;
+}
+
+function renderPageTabs() {
+  $("page-tabs").innerHTML = PAGE_TABS.map(t =>
+    '<button data-page="' + t.id + '" class="' + (currentPage === t.id ? "active" : "") + '">' +
+    '<i class="ti ' + t.icon + '" style="font-size:16px; vertical-align:-2px; margin-right:6px;"></i>' + t.n + '</button>'
+  ).join("");
+}
+
+function switchPage(id) {
+  currentPage = id;
+  renderPageTabs();
+  $("page-calc").style.display = id === "calc" ? "" : "none";
+  $("page-trades").style.display = id === "trades" ? "" : "none";
+  $("page-analysis").style.display = id === "analysis" ? "" : "none";
+  if (id === "trades") renderTradesTab();
+  if (id === "analysis") renderAnalysisTab();
+}
+
+function renderGate(container, message) {
+  container.innerHTML =
+    '<div class="card">' +
+      '<div style="font-size:14px; font-weight:600; margin-bottom:10px;"><i class="ti ti-lock" style="font-size:16px; vertical-align:-2px; margin-right:6px;"></i>비밀번호 확인</div>' +
+      '<p class="hint" style="margin:0 0 12px;">' + (message || "실제 잔고·거래 내역을 보려면 대시보드 비밀번호를 입력하세요.") + '</p>' +
+      '<div style="display:flex; gap:8px;">' +
+        '<input type="password" id="pw-input" placeholder="비밀번호" style="flex:1;">' +
+        '<button id="pw-submit" style="white-space:nowrap;">확인</button>' +
+      '</div>' +
+    '</div>';
+}
+
+function fmtDate(ms) {
+  const d = new Date(ms);
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0") + " " +
+    String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+}
+
+async function loadLiveData(days) {
+  liveData.loading = true;
+  liveData.error = null;
+  try {
+    const [positions, account, history] = await Promise.all([
+      fetchApi("/api/positions"),
+      fetchApi("/api/account"),
+      fetchApi("/api/history?days=" + (days || 90))
+    ]);
+    liveData.positions = positions.data || [];
+    liveData.account = (account.data && account.data[0]) || null;
+    liveData.history = (history.list || []).sort((a, b) => b.utime - a.utime);
+    liveData.loaded = true;
+  } catch (err) {
+    liveData.error = err.message === "unauthorized" ? "unauthorized" : (err.message || "불러오기 실패");
+  }
+  liveData.loading = false;
+}
+
+function refreshBar(days) {
+  return '<div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap;">' +
+    '<select id="hist-days" style="width:auto;">' +
+      [30, 90, 180, 365].map(d => '<option value="' + d + '"' + (d === days ? " selected" : "") + '>최근 ' + d + '일</option>').join("") +
+    '</select>' +
+    '<button id="refresh-live"><i class="ti ti-refresh" style="font-size:16px; vertical-align:-2px; margin-right:6px;"></i>새로고침</button>' +
+    (liveData.account ? '<span style="font-size:12px; color:var(--muted);">계정 순자산 ' + fmtMoney(Number(liveData.account.accountEquity)) + ' $</span>' : "") +
+  '</div>';
+}
+
+async function renderTradesTab(days) {
+  const box = $("page-trades");
+  if (!getPW()) { renderGate(box); return; }
+  if (!liveData.loaded && !liveData.loading) await loadLiveData(days);
+  if (liveData.error === "unauthorized") { renderGate(box, "비밀번호가 올바르지 않습니다. 다시 입력해주세요."); return; }
+  if (liveData.error) { box.innerHTML = '<div class="warnbox">' + liveData.error + '</div>' + refreshBar(days || 90); return; }
+  if (liveData.loading) { box.innerHTML = '<p class="hint">불러오는 중...</p>'; return; }
+
+  const positions = liveData.positions || [];
+  const history = liveData.history || [];
+  const wins = history.filter(t => t.netProfit > 0).length;
+
+  let html = refreshBar(days || 90);
+
+  html += '<div class="mcards">' +
+    mcard("보유 포지션", positions.length + "개") +
+    mcard("청산 거래", history.length + "개") +
+    mcard("승률", history.length ? r1(wins / history.length * 100) + "%" : "—") +
+    mcard("실현 손익 합계", (history.reduce((s, t) => s + t.netProfit, 0) >= 0 ? "+" : "") + fmtMoney(history.reduce((s, t) => s + t.netProfit, 0)) + " $",
+      history.reduce((s, t) => s + t.netProfit, 0) >= 0 ? "var(--green)" : "var(--red)") +
+  '</div>';
+
+  html += '<div style="font-size:14px; font-weight:600; margin:16px 0 10px;">보유 중인 포지션</div>';
+  if (positions.length === 0) {
+    html += '<div class="empty">보유 중인 포지션이 없습니다.</div>';
+  } else {
+    positions.forEach(p => {
+      const dirBadge = p.holdSide === "long"
+        ? '<span class="badge" style="background:var(--green-bg); color:var(--green);">롱</span>'
+        : '<span class="badge" style="background:var(--red-bg); color:var(--red);">숏</span>';
+      const pnl = Number(p.unrealizedPL);
+      html += '<div class="card">' +
+        '<div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">' +
+          '<span style="font-weight:600;">' + p.symbol + '</span>' + dirBadge +
+          '<span style="font-size:12px; color:var(--muted);">' + p.leverage + '배 · ' + p.marginMode + '</span>' +
+        '</div>' +
+        '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:0 24px;">' +
+          row("진입가", fmtPx(Number(p.openPriceAvg))) +
+          row("현재가", fmtPx(Number(p.markPrice))) +
+          row("미실현 손익", (pnl >= 0 ? "+" : "") + fmtMoney(pnl) + " $", pnl >= 0 ? "var(--green)" : "var(--red)") +
+          row("투입 증거금", fmtMoney(Number(p.marginSize)) + " $") +
+          (p.stopLoss ? row("설정된 손절가", fmtPx(Number(p.stopLoss)), "var(--red)") : "") +
+          (p.takeProfit ? row("설정된 익절가", fmtPx(Number(p.takeProfit)), "var(--green)") : "") +
+        '</div>' +
+      '</div>';
+    });
+  }
+
+  html += '<div style="font-size:14px; font-weight:600; margin:20px 0 10px;">청산된 거래 (최근 ' + (days || 90) + '일)</div>';
+  if (history.length === 0) {
+    html += '<div class="empty">해당 기간에 청산된 거래가 없습니다.</div>';
+  } else {
+    history.forEach(t => {
+      const dirBadge = t.holdSide === "long"
+        ? '<span class="badge" style="background:var(--green-bg); color:var(--green);">롱</span>'
+        : '<span class="badge" style="background:var(--red-bg); color:var(--red);">숏</span>';
+      const win = t.netProfit > 0;
+      html += '<div class="card">' +
+        '<div style="display:flex; align-items:center; gap:8px; margin-bottom:10px; flex-wrap:wrap;">' +
+          '<span style="font-weight:600;">' + t.symbol + '</span>' + dirBadge +
+          '<span style="font-size:12px; color:var(--muted);">' + (t.leverage || "?") + '배 · ' + t.exitReason + '</span>' +
+          '<span style="font-size:12px; color:var(--muted); margin-left:auto;">' + fmtDate(t.utime) + '</span>' +
+        '</div>' +
+        '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:0 24px;">' +
+          row("진입가", fmtPx(t.openAvgPrice)) +
+          row("청산가", fmtPx(t.closeAvgPrice)) +
+          row("ROI", t.roePct !== null ? (t.roePct >= 0 ? "+" : "") + t.roePct + "%" : "—", win ? "var(--green)" : "var(--red)") +
+          row("실현 손익", (win ? "+" : "") + fmtMoney(t.netProfit) + " $", win ? "var(--green)" : "var(--red)") +
+        '</div>' +
+      '</div>';
+    });
+  }
+
+  box.innerHTML = html;
+}
+
+function analyzeTrades(history, stopROE, rr) {
+  const closed = history.filter(t => t.roePct !== null);
+  const n = closed.length;
+  const wins = closed.filter(t => t.netProfit > 0);
+  const losses = closed.filter(t => t.netProfit <= 0);
+  const avg = arr => arr.length ? arr.reduce((s, x) => s + x, 0) / arr.length : 0;
+  const winRate = n ? wins.length / n * 100 : 0;
+  const avgWinROE = avg(wins.map(t => t.roePct));
+  const avgLossROE = avg(losses.map(t => t.roePct));
+  const rMultiples = closed.map(t => t.roePct / stopROE);
+  const avgR = avg(rMultiples);
+  const expectancyUsd = avg(closed.map(t => t.netProfit));
+  const autoCount = closed.filter(t => t.exitReason.indexOf("자동") >= 0).length;
+  const slCompliant = losses.filter(t => Math.abs(t.roePct) <= stopROE * 1.2).length;
+  const slViolations = losses.filter(t => Math.abs(t.roePct) > stopROE * 1.2);
+  const severeViolations = losses.filter(t => Math.abs(t.roePct) > stopROE * 2);
+  const targetHitWins = wins.filter(t => t.roePct >= stopROE * rr * 0.9).length;
+  const leverages = closed.filter(t => t.leverage).map(t => t.leverage);
+  const levMin = leverages.length ? Math.min(...leverages) : null;
+  const levMax = leverages.length ? Math.max(...leverages) : null;
+
+  const verdicts = closed.map(t => {
+    let v, color;
+    if (t.netProfit > 0 && t.roePct >= stopROE * rr * 0.9) { v = "목표 도달"; color = "var(--green)"; }
+    else if (t.netProfit > 0) { v = "익절 (목표 미달)"; color = "var(--amber)"; }
+    else if (Math.abs(t.roePct) > stopROE * 2) { v = "심각한 손절 위반"; color = "var(--red)"; }
+    else if (Math.abs(t.roePct) > stopROE * 1.2) { v = "손절 위반"; color = "var(--red)"; }
+    else { v = "손절 준수"; color = "var(--green)"; }
+    return { t, v, color };
+  });
+
+  return {
+    n, winRate, avgWinROE, avgLossROE, avgR, expectancyUsd, autoCount,
+    slCompliant, slViolations, severeViolations, targetHitWins, levMin, levMax, verdicts
+  };
+}
+
+async function renderAnalysisTab(days) {
+  const box = $("page-analysis");
+  if (!getPW()) { renderGate(box); return; }
+  if (!liveData.loaded && !liveData.loading) await loadLiveData(days);
+  if (liveData.error === "unauthorized") { renderGate(box, "비밀번호가 올바르지 않습니다. 다시 입력해주세요."); return; }
+  if (liveData.error) { box.innerHTML = '<div class="warnbox">' + liveData.error + '</div>' + refreshBar(days || 90); return; }
+  if (liveData.loading) { box.innerHTML = '<p class="hint">불러오는 중...</p>'; return; }
+
+  const stopROE = state.stop, rr = state.rr;
+  const history = liveData.history || [];
+  const a = analyzeTrades(history, stopROE, rr);
+
+  let html = refreshBar(days || 90);
+  html += '<p class="hint" style="margin:-8px 0 16px;">현재 계산기에 설정된 기준(손절 ROI -' + stopROE + '% · 손익비 1:' + rr + ')을 오닐 원칙으로 삼아 비교합니다. 계산기 상단에서 값을 바꾸면 이 분석도 즉시 다시 계산됩니다.</p>';
+
+  if (a.n === 0) {
+    html += '<div class="empty">분석할 청산 거래가 없습니다.</div>';
+    box.innerHTML = html;
+    return;
+  }
+
+  html += '<div class="mcards">' +
+    mcard("청산 거래 수", a.n + "건") +
+    mcard("승률", r1(a.winRate) + "%") +
+    mcard("평균 R (설정 손절 대비)", (a.avgR >= 0 ? "+" : "") + r1(a.avgR) + "R", a.avgR >= 0 ? "var(--green)" : "var(--red)") +
+    mcard("건당 기대값", (a.expectancyUsd >= 0 ? "+" : "") + fmtMoney(a.expectancyUsd) + " $", a.expectancyUsd >= 0 ? "var(--green)" : "var(--red)") +
+  '</div>';
+
+  html += '<div class="mcards">' +
+    mcard("자동 청산 비율 (SL/TP)", r1(a.autoCount / a.n * 100) + "%") +
+    mcard("손절 규칙 준수율", (history.filter(t=>t.netProfit<=0).length ? r1(a.slCompliant / history.filter(t=>t.netProfit<=0).length * 100) : 100) + "%") +
+    mcard("목표(1:" + rr + ") 도달 승리", a.targetHitWins + "건") +
+    mcard("레버리지 범위", a.levMin !== null ? a.levMin + "x ~ " + a.levMax + "x" : "—") +
+  '</div>';
+
+  const findings = [];
+  if (a.autoCount / a.n < 0.5) findings.push("전체 거래의 " + r1((1 - a.autoCount / a.n) * 100) + "%가 사전 설정된 손절/익절 없이 수동으로 청산되었습니다. 진입과 동시에 SL/TP를 걸어두면 규칙을 더 일관되게 지킬 수 있습니다.");
+  if (a.severeViolations.length > 0) findings.push(a.severeViolations.length + "건의 거래에서 손실이 설정 손절 기준의 2배(" + r1(stopROE * 2) + "%)를 넘었습니다 — 손실을 방치한 대표 사례입니다.");
+  else if (a.slViolations.length > 0) findings.push(a.slViolations.length + "건의 거래에서 손실이 설정 손절 기준(-" + stopROE + "%)을 다소 초과했습니다.");
+  if (a.levMax !== null && a.levMin !== null && a.levMax / a.levMin >= 5) findings.push("레버리지가 " + a.levMin + "배~" + a.levMax + "배로 종목마다 크게 달랐습니다. 리스크 계산의 기준이 흔들리면 2% 룰도 함께 흔들립니다.");
+  if (a.avgR < 0) findings.push("평균 R이 음수입니다 — 손실 거래의 크기가 승리 거래보다 시스템적으로 컸다는 뜻입니다.");
+  if (findings.length === 0) findings.push("설정한 기준과 비교했을 때 특별한 규칙 위반이 발견되지 않았습니다.");
+
+  html += '<div class="card">' +
+    '<div style="font-size:14px; font-weight:600; margin-bottom:10px;"><i class="ti ti-bulb" style="font-size:16px; vertical-align:-2px; margin-right:6px;"></i>핵심 발견</div>' +
+    '<ul style="margin:0; padding-left:20px; font-size:14px; line-height:1.8;">' +
+      findings.map(f => '<li>' + f + '</li>').join("") +
+    '</ul>' +
+  '</div>';
+
+  html += '<div style="font-size:14px; font-weight:600; margin:16px 0 10px;">거래별 판정</div>';
+  a.verdicts.forEach(({ t, v, color }) => {
+    const dirBadge = t.holdSide === "long"
+      ? '<span class="badge" style="background:var(--green-bg); color:var(--green);">롱</span>'
+      : '<span class="badge" style="background:var(--red-bg); color:var(--red);">숏</span>';
+    html += '<div class="card">' +
+      '<div style="display:flex; align-items:center; gap:8px; margin-bottom:8px; flex-wrap:wrap;">' +
+        '<span style="font-weight:600;">' + t.symbol + '</span>' + dirBadge +
+        '<span class="badge" style="background:var(--tile); color:' + color + '; font-weight:600;">' + v + '</span>' +
+        '<span style="font-size:12px; color:var(--muted); margin-left:auto;">' + fmtDate(t.utime) + '</span>' +
+      '</div>' +
+      '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)); gap:0 24px;">' +
+        row("레버리지", t.leverage ? t.leverage + "배" : "—") +
+        row("ROI", (t.roePct >= 0 ? "+" : "") + t.roePct + "%") +
+        row("실현 손익", (t.netProfit >= 0 ? "+" : "") + fmtMoney(t.netProfit) + " $") +
+        row("청산 방식", t.exitReason) +
+      '</div>' +
+    '</div>';
+  });
+
+  box.innerHTML = html;
+}
+
+document.addEventListener("click", e => {
+  const pt = e.target.closest("[data-page]");
+  if (pt) { switchPage(pt.getAttribute("data-page")); return; }
+  if (e.target.closest("#pw-submit")) {
+    const input = $("pw-input");
+    if (input && input.value) {
+      setPW(input.value);
+      liveData = { positions: null, history: null, account: null, loaded: false, loading: false, error: null };
+      if (currentPage === "trades") renderTradesTab();
+      if (currentPage === "analysis") renderAnalysisTab();
+    }
+    return;
+  }
+  if (e.target.closest("#refresh-live")) {
+    liveData = { positions: null, history: null, account: null, loaded: false, loading: false, error: null };
+    const days = Number(($("hist-days") || {}).value || 90);
+    if (currentPage === "trades") renderTradesTab(days);
+    if (currentPage === "analysis") renderAnalysisTab(days);
+  }
+});
+
+document.addEventListener("change", e => {
+  if (e.target.id === "hist-days") {
+    liveData = { positions: null, history: null, account: null, loaded: false, loading: false, error: null };
+    const days = Number(e.target.value);
+    if (currentPage === "trades") renderTradesTab(days);
+    if (currentPage === "analysis") renderAnalysisTab(days);
+  }
+});
+
+document.addEventListener("keydown", e => {
+  if (e.key === "Enter" && e.target && e.target.id === "pw-input") {
+    $("pw-submit").click();
+  }
+});
+
 render();
+renderPageTabs();
 </script>
 </body>
 </html>
