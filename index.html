@@ -112,7 +112,7 @@ label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px
   <div id="positions"></div>
   <div class="addbar" id="add-bar"></div>
 
-  <p class="footer">입력값은 이 브라우저에만 저장됩니다 · 개시증거금은 대략값이므로 사용 중인 증권사 값으로 수정하세요 · v1.3</p>
+  <p class="footer">입력값은 이 브라우저에만 저장됩니다 · 개시증거금은 대략값이므로 사용 중인 증권사 값으로 수정하세요 · v1.4</p>
 </div>
 
 <script>
@@ -269,18 +269,84 @@ function renderAddBar() {
   $("add-bar").innerHTML = html;
 }
 
+function buildCalc(p) {
+  const spec = prodOf(p);
+  const isCoin = p.cat === "coin";
+  const dec = isCoin ? undefined : decFromTick(spec.tick);
+  let big = "", results = "", warns = "";
+  if (isCoin) {
+    const c = calcCoin(p);
+    big =
+      bigPx("sl", "손절가 · ROI -" + p.stop + "%", fmtPx(c.stopPrice), "가격 " + (p.dir === "long" ? "-" : "+") + r1(c.pxStopPct) + "% · 손실 -" + fmtMoney(c.maxLoss) + " $") +
+      bigPx("tp", "익절가 · ROI +" + r1(c.roeTpPct) + "%", fmtPx(c.tpPrice), "가격 " + (p.dir === "long" ? "+" : "-") + r1(c.pxTpPct) + "% · 이익 +" + fmtMoney(c.profit) + " $");
+    results =
+      row("투입 증거금", fmtMoney(c.margin) + " $ (자본의 " + (state.capital > 0 ? r1(c.margin / state.capital * 100) : 0) + "%)", c.capOver ? "var(--red)" : null) +
+      row("포지션 크기 (× " + p.lev + "배)", fmtMoney(c.notional) + " $") +
+      row("수량", c.qty > 0 ? c.qty.toLocaleString("en-US", { maximumFractionDigits: 4 }) : "—") +
+      row("최대 손실 / 목표 이익", "-" + fmtMoney(c.maxLoss) + " / +" + fmtMoney(c.profit) + " $");
+    if (c.capOver) warns += warn("필요 증거금이 총자본을 초과합니다. 손절 ROI 폭을 넓히거나 리스크를 낮추세요.");
+    if (c.liqRisk) warns += warn("증거금 기준 손절이 청산선(-100%)에 가깝습니다.");
+  } else {
+    const c = calcFut(p, spec);
+    big =
+      bigPx("sl", "손절가 · 가격 -" + p.stop + "%", fmtPx(c.stopPrice, dec), Math.round(c.stopTicks).toLocaleString() + "틱 · 손실 -" + fmtMoney(c.actualRisk) + " $") +
+      bigPx("tp", "익절가 · 가격 +" + r1(c.tpPct) + "%", fmtPx(c.tpPrice, dec), "이익 +" + fmtMoney(c.profit) + " $");
+    results =
+      row("진입 계약수", c.cts + " 계약", c.cts === 0 ? "var(--red)" : "var(--blue)") +
+      row("계약당 손실 (손절 시)", "-" + fmtMoney(c.lossPerCt) + " $") +
+      row("필요 증거금", fmtMoney(c.marginReq) + " $", c.marginReq > state.capital ? "var(--red)" : null) +
+      row("명목가치 / 실효 레버리지", fmtMoney(c.notional) + " $ / " + r1(c.effLev) + "x") +
+      '<div style="font-size:12px; color:var(--muted); padding-top:6px;">틱 ' + spec.tick + ' = $' + spec.tv + ' · 1포인트 = $' + spec.pv.toLocaleString() + ' · 개시증거금(수정 가능) ~$' + p.mgn.toLocaleString() + '</div>';
+    if (c.cts === 0 && p.entry > 0) warns += warn("리스크 한도(" + fmtMoney(c.maxLoss) + " $)로는 1계약도 진입할 수 없습니다. 마이크로 상품을 선택하거나 손절 폭·리스크를 조정하세요.");
+    if (c.marginReq > state.capital) warns += warn("필요 증거금이 총자본을 초과합니다. 계약수를 줄이거나 마이크로 상품을 사용하세요.");
+  }
+  return { big: big, results: results, warns: warns };
+}
+
+function renderSummary() {
+  let totRisk = 0, totMargin = 0, totProfit = 0, shown = 0;
+  state.positions.forEach(p => {
+    if (state.tab !== "all" && p.cat !== state.tab) return;
+    shown++;
+    if (p.cat === "coin") {
+      const c = calcCoin(p);
+      totRisk += c.maxLoss; totMargin += c.margin; totProfit += c.profit;
+    } else {
+      const c = calcFut(p, prodOf(p));
+      totRisk += c.actualRisk; totMargin += c.marginReq; totProfit += c.profit;
+    }
+  });
+  const tabName = state.tab === "all" ? "전체" : state.tab === "coin" ? "코인" : "해외선물";
+  $("summary").innerHTML =
+    mcard("총자본", fmtMoney(state.capital) + " $") +
+    mcard(tabName + " 종목", shown + "개") +
+    mcard(tabName + " 리스크", "-" + fmtMoney(totRisk) + " $ (" + (state.capital > 0 ? Math.round(totRisk / state.capital * 1000) / 10 : 0) + "%)", "var(--red)") +
+    mcard(tabName + " 증거금", fmtMoney(totMargin) + " $", totMargin > state.capital ? "var(--red)" : null) +
+    mcard(tabName + " 목표 이익", "+" + fmtMoney(totProfit) + " $", "var(--green)");
+}
+
+function updateCalc(i) {
+  const p = state.positions[+i];
+  if (!p) return;
+  const parts = buildCalc(p);
+  const bigEl = document.querySelector('[data-big="' + i + '"]');
+  const resEl = document.querySelector('[data-res="' + i + '"]');
+  if (bigEl) bigEl.innerHTML = parts.big;
+  if (resEl) resEl.innerHTML = '<div style="border-top:1px solid var(--border); padding-top:10px; display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:0 24px;">' + parts.results + '</div>' + parts.warns;
+  renderSummary();
+  save();
+}
+
 function render() {
   renderTabs();
   renderAddBar();
-  let totRisk = 0, totMargin = 0, totProfit = 0, shown = 0;
+  let shown = 0;
   const box = $("positions");
   box.innerHTML = "";
   state.positions.forEach((p, i) => {
     if (state.tab !== "all" && p.cat !== state.tab) return;
     shown++;
-    const spec = prodOf(p);
     const isCoin = p.cat === "coin";
-    const dec = isCoin ? undefined : decFromTick(spec.tick);
     const card = document.createElement("div");
     card.className = "card";
     const catBadge = isCoin
@@ -307,35 +373,7 @@ function render() {
       fld("리스크 (%)", '<input type="number" data-i="' + i + '" data-k="risk" value="' + p.risk + '" min="0.1" max="10" step="0.1">') +
       fld("계약당 증거금 ($)", '<input type="number" data-i="' + i + '" data-k="mgn" value="' + p.mgn + '" min="0">');
 
-    let big = "", results = "", warns = "";
-    if (isCoin) {
-      const c = calcCoin(p);
-      totRisk += c.maxLoss; totMargin += c.margin; totProfit += c.profit;
-      big =
-        bigPx("sl", "손절가 · ROI -" + p.stop + "%", fmtPx(c.stopPrice), "가격 " + (p.dir === "long" ? "-" : "+") + r1(c.pxStopPct) + "% · 손실 -" + fmtMoney(c.maxLoss) + " $") +
-        bigPx("tp", "익절가 · ROI +" + r1(c.roeTpPct) + "%", fmtPx(c.tpPrice), "가격 " + (p.dir === "long" ? "+" : "-") + r1(c.pxTpPct) + "% · 이익 +" + fmtMoney(c.profit) + " $");
-      results =
-        row("투입 증거금", fmtMoney(c.margin) + " $ (자본의 " + (state.capital > 0 ? r1(c.margin / state.capital * 100) : 0) + "%)", c.capOver ? "var(--red)" : null) +
-        row("포지션 크기 (× " + p.lev + "배)", fmtMoney(c.notional) + " $") +
-        row("수량", c.qty > 0 ? c.qty.toLocaleString("en-US", { maximumFractionDigits: 4 }) : "—") +
-        row("최대 손실 / 목표 이익", "-" + fmtMoney(c.maxLoss) + " / +" + fmtMoney(c.profit) + " $");
-      if (c.capOver) warns += warn("필요 증거금이 총자본을 초과합니다. 손절 ROI 폭을 넓히거나 리스크를 낮추세요.");
-      if (c.liqRisk) warns += warn("증거금 기준 손절이 청산선(-100%)에 가깝습니다.");
-    } else {
-      const c = calcFut(p, spec);
-      totRisk += c.actualRisk; totMargin += c.marginReq; totProfit += c.profit;
-      big =
-        bigPx("sl", "손절가 · 가격 -" + p.stop + "%", fmtPx(c.stopPrice, dec), Math.round(c.stopTicks).toLocaleString() + "틱 · 손실 -" + fmtMoney(c.actualRisk) + " $") +
-        bigPx("tp", "익절가 · 가격 +" + r1(c.tpPct) + "%", fmtPx(c.tpPrice, dec), "이익 +" + fmtMoney(c.profit) + " $");
-      results =
-        row("진입 계약수", c.cts + " 계약", c.cts === 0 ? "var(--red)" : "var(--blue)") +
-        row("계약당 손실 (손절 시)", "-" + fmtMoney(c.lossPerCt) + " $") +
-        row("필요 증거금", fmtMoney(c.marginReq) + " $", c.marginReq > state.capital ? "var(--red)" : null) +
-        row("명목가치 / 실효 레버리지", fmtMoney(c.notional) + " $ / " + r1(c.effLev) + "x") +
-        '<div style="font-size:12px; color:var(--muted); padding-top:6px;">틱 ' + spec.tick + ' = $' + spec.tv + ' · 1포인트 = $' + spec.pv.toLocaleString() + ' · 개시증거금(수정 가능) ~$' + p.mgn.toLocaleString() + '</div>';
-      if (c.cts === 0 && p.entry > 0) warns += warn("리스크 한도(" + fmtMoney(c.maxLoss) + " $)로는 1계약도 진입할 수 없습니다. 마이크로 상품을 선택하거나 손절 폭·리스크를 조정하세요.");
-      if (c.marginReq > state.capital) warns += warn("필요 증거금이 총자본을 초과합니다. 계약수를 줄이거나 마이크로 상품을 사용하세요.");
-    }
+    const parts = buildCalc(p);
 
     card.innerHTML =
       '<div style="display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap;">' +
@@ -343,14 +381,14 @@ function render() {
         '<button data-del="' + i + '" aria-label="종목 삭제" style="padding:0 10px;"><i class="ti ti-trash" style="font-size:16px;"></i></button>' +
       '</div>' +
       '<div class="grid-sm" style="margin-bottom:12px;">' + inputs + '</div>' +
-      '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:12px;">' + big + '</div>' +
+      '<div data-big="' + i + '" style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:12px;">' + parts.big + '</div>' +
       '<div style="margin-bottom:12px;">' +
         '<label>진입 근거</label>' +
         '<select data-i="' + i + '" data-k="reason">' +
         REASONS.map((r, ri) => '<option value="' + ri + '"' + (p.reason === ri ? " selected" : "") + '>' + r + '</option>').join("") +
         '</select>' +
       '</div>' +
-      '<div style="border-top:1px solid var(--border); padding-top:10px; display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:0 24px;">' + results + '</div>' + warns;
+      '<div data-res="' + i + '"><div style="border-top:1px solid var(--border); padding-top:10px; display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:0 24px;">' + parts.results + '</div>' + parts.warns + '</div>';
     box.appendChild(card);
   });
 
@@ -358,13 +396,7 @@ function render() {
     box.innerHTML = '<div class="empty">이 카테고리에 종목이 없습니다. 아래 버튼으로 추가하세요.</div>';
   }
 
-  const tabName = state.tab === "all" ? "전체" : state.tab === "coin" ? "코인" : "해외선물";
-  $("summary").innerHTML =
-    mcard("총자본", fmtMoney(state.capital) + " $") +
-    mcard(tabName + " 종목", shown + "개") +
-    mcard(tabName + " 리스크", "-" + fmtMoney(totRisk) + " $ (" + (state.capital > 0 ? Math.round(totRisk / state.capital * 1000) / 10 : 0) + "%)", "var(--red)") +
-    mcard(tabName + " 증거금", fmtMoney(totMargin) + " $", totMargin > state.capital ? "var(--red)" : null) +
-    mcard(tabName + " 목표 이익", "+" + fmtMoney(totProfit) + " $", "var(--green)");
+  renderSummary();
   save();
 }
 
@@ -399,10 +431,10 @@ document.addEventListener("input", e => {
   if (!p) return;
   const k = t.getAttribute("data-k");
   if (k === "name") { p.name = t.value; save(); return; }
-  if (["entry", "lev", "risk", "stop", "mgn"].indexOf(k) >= 0) p[k] = +t.value || 0;
-  render();
-  const again = document.querySelector('[data-i="' + i + '"][data-k="' + k + '"]');
-  if (again && again.tagName === "INPUT") again.focus();
+  if (["entry", "lev", "risk", "stop", "mgn"].indexOf(k) >= 0) {
+    p[k] = +t.value || 0;
+    updateCalc(i);
+  }
 });
 
 document.addEventListener("change", e => {
