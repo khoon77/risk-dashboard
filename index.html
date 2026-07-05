@@ -370,6 +370,7 @@ function render() {
 
 document.addEventListener("input", e => {
   const t = e.target;
+  if (t.tagName === "SELECT") return;
   if (t.id === "g-capital") { state.capital = +t.value || 0; render(); return; }
   if (t.id === "g-rr") { state.rr = +t.value || 3; state.positions.forEach(p => p.rr = state.rr); render(); return; }
   const i = t.getAttribute("data-i");
