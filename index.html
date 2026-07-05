@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>리스크 관리 대시보드</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.24.0/dist/tabler-icons.min.css">
+<style>
+:root {
+  --bg: #faf9f5; --card: #ffffff; --tile: #f4f2ec; --border: #e3e0d8;
+  --text: #1a1a17; --sub: #5f5e5a; --muted: #8a8880;
+  --red: #a32d2d; --red-bg: #fcebeb; --green: #3b6d11; --green-bg: #eaf3de;
+  --blue: #185fa5; --blue-bg: #e6f1fb; --amber: #854f0b; --amber-bg: #faeeda;
+  --radius: 8px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141413; --card: #1f1e1c; --tile: #282723; --border: #3a3833;
+    --text: #f0efea; --sub: #b4b2a9; --muted: #83817a;
+    --red: #f09595; --red-bg: #501313; --green: #c0dd97; --green-bg: #27500a;
+    --blue: #85b7eb; --blue-bg: #0c447c; --amber: #fac775; --amber-bg: #633806;
+  }
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+  font-size: 15px; line-height: 1.6;
+}
+.wrap { max-width: 860px; margin: 0 auto; padding: 20px 16px 60px; }
+h1 { font-size: 20px; font-weight: 600; margin: 0 0 4px; }
+.subtitle { font-size: 13px; color: var(--muted); margin: 0 0 20px; }
+input, select {
+  height: 38px; padding: 0 10px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--card); color: var(--text); font-size: 14px; width: 100%;
+}
+input:focus, select:focus { outline: 2px solid var(--blue); outline-offset: -1px; }
+button {
+  height: 38px; padding: 0 14px; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--card); color: var(--text); font-size: 14px; cursor: pointer;
+}
+button:hover { background: var(--tile); }
+label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 12px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.grid-sm { display: grid; grid-template-columns: repeat(auto-fit, minmax(115px, 1fr)); gap: 10px; }
+.badge { font-size: 12px; padding: 2px 10px; border-radius: var(--radius); white-space: nowrap; }
+.hint { font-size: 12px; color: var(--muted); margin: 10px 0 0; }
+.tabs { display: flex; gap: 4px; margin-bottom: 16px; border-bottom: 1px solid var(--border); }
+.tabs button { border: none; border-radius: 0; background: transparent; padding: 8px 14px 10px; color: var(--sub); }
+.tabs button.active { color: var(--text); font-weight: 600; box-shadow: inset 0 -2px 0 var(--text); }
+.tabs button:hover { background: transparent; }
+.mcards { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.mcard { background: var(--tile); border-radius: var(--radius); padding: 12px 14px; }
+.mcard .lbl { font-size: 12px; color: var(--sub); margin-bottom: 2px; }
+.mcard .val { font-size: 18px; font-weight: 600; }
+.bigpx { border-radius: var(--radius); padding: 12px 14px; }
+.bigpx .lbl { font-size: 12px; margin-bottom: 2px; }
+.bigpx .val { font-size: 24px; font-weight: 600; }
+.bigpx .sub { font-size: 12px; }
+.rrow { display: flex; justify-content: space-between; padding: 3px 0; font-size: 13px; gap: 12px; }
+.rrow .k { color: var(--sub); }
+.rrow .v { font-weight: 600; text-align: right; }
+.warnbox { margin-top: 10px; background: var(--red-bg); color: var(--red); font-size: 13px; padding: 8px 12px; border-radius: var(--radius); }
+.addbar { display: flex; gap: 8px; margin-top: 4px; }
+.addbar button { flex: 1; }
+.empty { text-align: center; color: var(--muted); font-size: 14px; padding: 32px 0; }
+.footer { font-size: 12px; color: var(--muted); margin-top: 24px; text-align: center; }
+@media (max-width: 480px) { .wrap { padding: 14px 10px 50px; } .card { padding: 12px; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><i class="ti ti-shield-check" style="font-size:20px; vertical-align:-2px; margin-right:6px;"></i>리스크 관리 대시보드</h1>
+  <p class="subtitle">윌리엄 오닐 2% 룰 · 손익비 1:3 · 손절/익절은 증거금 ROI 기준 (레버리지 자동 환산)</p>
+
+  <div class="card">
+    <div style="font-size:13px; font-weight:600; color:var(--sub); margin-bottom:12px;"><i class="ti ti-settings" style="font-size:16px; vertical-align:-2px; margin-right:6px;"></i>기본 셋업</div>
+    <div class="grid">
+      <div>
+        <label>총자본 (USD)</label>
+        <input type="number" id="g-capital" value="654" min="0">
+      </div>
+      <div>
+        <label>1종목 최대 손실률 (%)</label>
+        <select id="g-risk">
+          <option value="1">1% (보수적)</option>
+          <option value="1.5">1.5%</option>
+          <option value="2" selected>2% (표준)</option>
+        </select>
+      </div>
+      <div>
+        <label>코인 손절 · ROI 기준 (%)</label>
+        <select id="g-stop">
+          <option value="2">-2% (익절 +6%)</option>
+          <option value="4">-4% (익절 +12%)</option>
+          <option value="7">-7% (익절 +21%)</option>
+          <option value="7.5">-7.5% (익절 +22.5%)</option>
+          <option value="8" selected>-8% (익절 +24%)</option>
+        </select>
+      </div>
+      <div>
+        <label>손익비 (1 : R)</label>
+        <input type="number" id="g-rr" value="3" min="1" step="0.5">
+      </div>
+    </div>
+    <p class="hint">코인 손절·익절 %는 내 증거금 기준 손익(ROI)입니다. 레버리지를 나눠 실제 가격으로 자동 환산됩니다. 해외선물은 가격 변동 기준입니다.</p>
+  </div>
+
+  <div class="tabs" id="tabs"></div>
+  <div class="mcards" id="summary"></div>
+  <div id="positions"></div>
+  <div class="addbar" id="add-bar"></div>
+
+  <p class="footer">입력값은 이 브라우저에만 저장됩니다 · 개시증거금은 대략값이므로 사용 중인 증권사 값으로 수정하세요</p>
+</div>
+
+<script>
+const REASONS = [
+  "1시간봉 20/60 이평 골든크로스",
+  "1시간봉 20이평 눌림목 지지",
+  "일봉 전고점(저항) 돌파",
+  "컵앤핸들 패턴 돌파",
+  "거래량 동반 박스권 돌파",
+  "1시간봉 20/60 이평 데드크로스 (숏)",
+  "지지선 이탈 후 되돌림 (숏)",
+  "기타"
+];
+const COINS = [
+  { id: "BTC", n: "비트코인 (BTC)", lev: 4, px: 62000 },
+  { id: "ETH", n: "이더리움 (ETH)", lev: 3, px: 3200 },
+  { id: "XRP", n: "리플 (XRP)", lev: 2, px: 1.16 },
+  { id: "ADA", n: "에이다 (ADA)", lev: 2, px: 0.75 },
+  { id: "SOL", n: "솔라나 (SOL)", lev: 2, px: 170 },
+  { id: "BNB", n: "BNB", lev: 2, px: 900 },
+  { id: "CUSTOM", n: "직접 입력", lev: 2, px: 0 }
+];
+const FUTS = [
+  { id: "NQ", n: "나스닥100 E-mini (NQ)", tick: 0.25, tv: 5, pv: 20, mgn: 25000, stop: 1.5, px: 25000 },
+  { id: "MNQ", n: "마이크로 나스닥 (MNQ)", tick: 0.25, tv: 0.5, pv: 2, mgn: 2500, stop: 1.5, px: 25000 },
+  { id: "6E", n: "유로/달러 (6E)", tick: 0.00005, tv: 6.25, pv: 125000, mgn: 2600, stop: 0.5, px: 1.16 },
+  { id: "M6E", n: "마이크로 유로 (M6E)", tick: 0.0001, tv: 1.25, pv: 12500, mgn: 260, stop: 0.5, px: 1.16 },
+  { id: "6B", n: "파운드/달러 (6B)", tick: 0.0001, tv: 6.25, pv: 62500, mgn: 2100, stop: 0.6, px: 1.34 },
+  { id: "CL", n: "WTI 원유 (CL)", tick: 0.01, tv: 10, pv: 1000, mgn: 6500, stop: 2.5, px: 62 },
+  { id: "MCL", n: "마이크로 원유 (MCL)", tick: 0.01, tv: 1, pv: 100, mgn: 650, stop: 2.5, px: 62 },
+  { id: "GC", n: "골드 (GC)", tick: 0.1, tv: 10, pv: 100, mgn: 12500, stop: 1.5, px: 4100 },
+  { id: "MGC", n: "마이크로 골드 (MGC)", tick: 0.1, tv: 1, pv: 10, mgn: 1250, stop: 1.5, px: 4100 },
+  { id: "SI", n: "은 (SI)", tick: 0.005, tv: 25, pv: 5000, mgn: 14000, stop: 2.5, px: 48 },
+  { id: "SIL", n: "마이크로 은 (SIL)", tick: 0.005, tv: 5, pv: 1000, mgn: 2800, stop: 2.5, px: 48 },
+  { id: "HG", n: "구리 (HG)", tick: 0.0005, tv: 12.5, pv: 25000, mgn: 10000, stop: 2, px: 5 },
+  { id: "MHG", n: "마이크로 구리 (MHG)", tick: 0.0005, tv: 1.25, pv: 2500, mgn: 1000, stop: 2, px: 5 }
+];
+const TABS = [
+  { id: "all", n: "전체", icon: "ti-layout-grid" },
+  { id: "coin", n: "코인", icon: "ti-coin-bitcoin" },
+  { id: "fut", n: "해외선물", icon: "ti-chart-candle" }
+];
+const KEY = "oneil-risk-dash-final";
+let state = null;
+try { state = JSON.parse(localStorage.getItem(KEY)); } catch (e) {}
+if (!state || !state.positions) state = {
+  capital: 654, risk: 2, stop: 8, rr: 3, tab: "all",
+  positions: [
+    { cat: "coin", prod: "XRP", name: "", dir: "short", entry: 1.1641, lev: 2, risk: 2, stop: 8, rr: 3, reason: 5, mgn: 0 }
+  ]
+};
+if (!state.tab) state.tab = "all";
+
+const $ = id => document.getElementById(id);
+$("g-capital").value = state.capital;
+$("g-risk").value = String(state.risk);
+$("g-stop").value = String(state.stop);
+$("g-rr").value = state.rr;
+
+function prodOf(p) {
+  const list = p.cat === "coin" ? COINS : FUTS;
+  return list.find(x => x.id === p.prod) || list[0];
+}
+function decFromTick(tick) {
+  const s = String(tick);
+  return s.indexOf(".") >= 0 ? s.split(".")[1].length : 0;
+}
+function fmtMoney(x) {
+  if (!isFinite(x)) return "—";
+  return x.toLocaleString("en-US", { maximumFractionDigits: x >= 1000 ? 0 : 2 });
+}
+function fmtPx(p, dec) {
+  if (!isFinite(p) || p <= 0) return "—";
+  if (dec !== undefined) return p.toLocaleString("en-US", { minimumFractionDigits: dec, maximumFractionDigits: dec });
+  const d = p >= 1000 ? 1 : p >= 10 ? 2 : p >= 0.1 ? 4 : 6;
+  return p.toLocaleString("en-US", { maximumFractionDigits: d });
+}
+function r1(x) { return Math.round(x * 100) / 100; }
+function save() { try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {} }
+
+function calcCoin(p) {
+  const maxLoss = state.capital * p.risk / 100;
+  const margin = p.stop > 0 ? maxLoss / (p.stop / 100) : 0;
+  const notional = margin * p.lev;
+  const qty = p.entry > 0 ? notional / p.entry : 0;
+  const pxStopPct = p.lev > 0 ? p.stop / p.lev : 0;
+  const pxTpPct = pxStopPct * p.rr;
+  const sign = p.dir === "long" ? 1 : -1;
+  return {
+    maxLoss, margin, notional, qty, pxStopPct, pxTpPct,
+    roeTpPct: p.stop * p.rr,
+    stopPrice: p.entry * (1 - sign * pxStopPct / 100),
+    tpPrice: p.entry * (1 + sign * pxTpPct / 100),
+    profit: maxLoss * p.rr,
+    liqRisk: p.stop >= 90,
+    capOver: margin > state.capital
+  };
+}
+function calcFut(p, spec) {
+  const maxLoss = state.capital * p.risk / 100;
+  const stopDist = p.entry * p.stop / 100;
+  const lossPerCt = stopDist * spec.pv;
+  const cts = lossPerCt > 0 ? Math.floor(maxLoss / lossPerCt) : 0;
+  const actualRisk = cts * lossPerCt;
+  const marginReq = cts * p.mgn;
+  const notional = p.entry * spec.pv * cts;
+  const sign = p.dir === "long" ? 1 : -1;
+  return {
+    maxLoss, stopDist, lossPerCt, cts, actualRisk, marginReq, notional,
+    effLev: marginReq > 0 ? notional / marginReq : 0,
+    stopTicks: spec.tick > 0 ? stopDist / spec.tick : 0,
+    stopPrice: p.entry * (1 - sign * p.stop / 100),
+    tpPct: p.stop * p.rr,
+    tpPrice: p.entry * (1 + sign * p.stop * p.rr / 100),
+    profit: actualRisk * p.rr
+  };
+}
+
+function bigPx(kind, label, price, sub) {
+  const bg = kind === "sl" ? "var(--red-bg)" : "var(--green-bg)";
+  const fg = kind === "sl" ? "var(--red)" : "var(--green)";
+  const icon = kind === "sl" ? "ti-arrow-bar-to-down" : "ti-target-arrow";
+  return '<div class="bigpx" style="background:' + bg + ';">' +
+    '<div class="lbl" style="color:' + fg + ';"><i class="ti ' + icon + '" style="font-size:14px; vertical-align:-2px; margin-right:4px;"></i>' + label + '</div>' +
+    '<div class="val" style="color:' + fg + ';">' + price + '</div>' +
+    '<div class="sub" style="color:' + fg + ';">' + sub + '</div></div>';
+}
+function row(label, value, color) {
+  return '<div class="rrow"><span class="k">' + label + '</span><span class="v"' + (color ? ' style="color:' + color + ';"' : '') + '>' + value + '</span></div>';
+}
+function fld(label, inner) {
+  return '<div><label>' + label + '</label>' + inner + '</div>';
+}
+function warn(msg) {
+  return '<div class="warnbox"><i class="ti ti-alert-triangle" style="font-size:15px; vertical-align:-2px; margin-right:6px;"></i>' + msg + '</div>';
+}
+function mcard(label, value, color) {
+  return '<div class="mcard"><div class="lbl">' + label + '</div><div class="val"' + (color ? ' style="color:' + color + ';"' : '') + '>' + value + '</div></div>';
+}
+
+function renderTabs() {
+  const counts = { all: state.positions.length, coin: 0, fut: 0 };
+  state.positions.forEach(p => counts[p.cat]++);
+  $("tabs").innerHTML = TABS.map(t =>
+    '<button data-tab="' + t.id + '" class="' + (state.tab === t.id ? "active" : "") + '">' +
+    '<i class="ti ' + t.icon + '" style="font-size:16px; vertical-align:-2px; margin-right:6px;"></i>' + t.n +
+    ' <span style="font-size:12px; color:var(--muted); margin-left:2px;">' + counts[t.id] + '</span></button>'
+  ).join("");
+}
+function renderAddBar() {
+  let html = "";
+  if (state.tab !== "fut") html += '<button id="add-coin"><i class="ti ti-coin-bitcoin" style="font-size:16px; vertical-align:-2px; margin-right:6px;"></i>코인 추가</button>';
+  if (state.tab !== "coin") html += '<button id="add-fut"><i class="ti ti-chart-candle" style="font-size:16px; vertical-align:-2px; margin-right:6px;"></i>해외선물 추가</button>';
+  $("add-bar").innerHTML = html;
+}
+
+function render() {
+  renderTabs();
+  renderAddBar();
+  let totRisk = 0, totMargin = 0, totProfit = 0, shown = 0;
+  const box = $("positions");
+  box.innerHTML = "";
+  state.positions.forEach((p, i) => {
+    if (state.tab !== "all" && p.cat !== state.tab) return;
+    shown++;
+    const spec = prodOf(p);
+    const isCoin = p.cat === "coin";
+    const dec = isCoin ? undefined : decFromTick(spec.tick);
+    const card = document.createElement("div");
+    card.className = "card";
+    const catBadge = isCoin
+      ? '<span class="badge" style="background:var(--amber-bg); color:var(--amber);">코인</span>'
+      : '<span class="badge" style="background:var(--blue-bg); color:var(--blue);">해외선물</span>';
+    const dirBadge = p.dir === "long"
+      ? '<span class="badge" style="background:var(--green-bg); color:var(--green);">롱</span>'
+      : '<span class="badge" style="background:var(--red-bg); color:var(--red);">숏</span>';
+    const list = isCoin ? COINS : FUTS;
+    const prodSel = '<select data-i="' + i + '" data-k="prod" style="flex:1; min-width:160px; width:auto; font-weight:600;">' +
+      list.map(x => '<option value="' + x.id + '"' + (x.id === p.prod ? " selected" : "") + '>' + x.n + '</option>').join("") + '</select>';
+    const nameFld = (isCoin && p.prod === "CUSTOM")
+      ? '<input data-i="' + i + '" data-k="name" value="' + (p.name || "").replace(/"/g, "&quot;") + '" placeholder="종목명" style="width:110px;">' : "";
+
+    let inputs =
+      fld("방향", '<select data-i="' + i + '" data-k="dir"><option value="long"' + (p.dir === "long" ? " selected" : "") + '>롱 (매수)</option><option value="short"' + (p.dir === "short" ? " selected" : "") + '>숏 (매도)</option></select>') +
+      fld("진입가 ($)", '<input type="number" data-i="' + i + '" data-k="entry" value="' + p.entry + '" min="0" step="any">');
+    if (isCoin) inputs +=
+      fld("레버리지 (x)", '<input type="number" data-i="' + i + '" data-k="lev" value="' + p.lev + '" min="1" max="125">') +
+      fld("손절 · ROI (%)", '<input type="number" data-i="' + i + '" data-k="stop" value="' + p.stop + '" min="0.1" max="100" step="0.5">') +
+      fld("리스크 (%)", '<input type="number" data-i="' + i + '" data-k="risk" value="' + p.risk + '" min="0.1" max="10" step="0.1">');
+    else inputs +=
+      fld("손절 · 가격 (%)", '<input type="number" data-i="' + i + '" data-k="stop" value="' + p.stop + '" min="0.1" max="50" step="0.1">') +
+      fld("리스크 (%)", '<input type="number" data-i="' + i + '" data-k="risk" value="' + p.risk + '" min="0.1" max="10" step="0.1">') +
+      fld("계약당 증거금 ($)", '<input type="number" data-i="' + i + '" data-k="mgn" value="' + p.mgn + '" min="0">');
+
+    let big = "", results = "", warns = "";
+    if (isCoin) {
+      const c = calcCoin(p);
+      totRisk += c.maxLoss; totMargin += c.margin; totProfit += c.profit;
+      big =
+        bigPx("sl", "손절가 · ROI -" + p.stop + "%", fmtPx(c.stopPrice), "가격 " + (p.dir === "long" ? "-" : "+") + r1(c.pxStopPct) + "% · 손실 -" + fmtMoney(c.maxLoss) + " $") +
+        bigPx("tp", "익절가 · ROI +" + r1(c.roeTpPct) + "%", fmtPx(c.tpPrice), "가격 " + (p.dir === "long" ? "+" : "-") + r1(c.pxTpPct) + "% · 이익 +" + fmtMoney(c.profit) + " $");
+      results =
+        row("투입 증거금", fmtMoney(c.margin) + " $ (자본의 " + (state.capital > 0 ? r1(c.margin / state.capital * 100) : 0) + "%)", c.capOver ? "var(--red)" : null) +
+        row("포지션 크기 (× " + p.lev + "배)", fmtMoney(c.notional) + " $") +
+        row("수량", c.qty > 0 ? c.qty.toLocaleString("en-US", { maximumFractionDigits: 4 }) : "—") +
+        row("최대 손실 / 목표 이익", "-" + fmtMoney(c.maxLoss) + " / +" + fmtMoney(c.profit) + " $");
+      if (c.capOver) warns += warn("필요 증거금이 총자본을 초과합니다. 손절 ROI 폭을 넓히거나 리스크를 낮추세요.");
+      if (c.liqRisk) warns += warn("증거금 기준 손절이 청산선(-100%)에 가깝습니다.");
+    } else {
+      const c = calcFut(p, spec);
+      totRisk += c.actualRisk; totMargin += c.marginReq; totProfit += c.profit;
+      big =
+        bigPx("sl", "손절가 · 가격 -" + p.stop + "%", fmtPx(c.stopPrice, dec), Math.round(c.stopTicks).toLocaleString() + "틱 · 손실 -" + fmtMoney(c.actualRisk) + " $") +
+        bigPx("tp", "익절가 · 가격 +" + r1(c.tpPct) + "%", fmtPx(c.tpPrice, dec), "이익 +" + fmtMoney(c.profit) + " $");
+      results =
+        row("진입 계약수", c.cts + " 계약", c.cts === 0 ? "var(--red)" : "var(--blue)") +
+        row("계약당 손실 (손절 시)", "-" + fmtMoney(c.lossPerCt) + " $") +
+        row("필요 증거금", fmtMoney(c.marginReq) + " $", c.marginReq > state.capital ? "var(--red)" : null) +
+        row("명목가치 / 실효 레버리지", fmtMoney(c.notional) + " $ / " + r1(c.effLev) + "x") +
+        '<div style="font-size:12px; color:var(--muted); padding-top:6px;">틱 ' + spec.tick + ' = $' + spec.tv + ' · 1포인트 = $' + spec.pv.toLocaleString() + ' · 개시증거금(수정 가능) ~$' + p.mgn.toLocaleString() + '</div>';
+      if (c.cts === 0 && p.entry > 0) warns += warn("리스크 한도(" + fmtMoney(c.maxLoss) + " $)로는 1계약도 진입할 수 없습니다. 마이크로 상품을 선택하거나 손절 폭·리스크를 조정하세요.");
+      if (c.marginReq > state.capital) warns += warn("필요 증거금이 총자본을 초과합니다. 계약수를 줄이거나 마이크로 상품을 사용하세요.");
+    }
+
+    card.innerHTML =
+      '<div style="display:flex; align-items:center; gap:8px; margin-bottom:12px; flex-wrap:wrap;">' +
+        catBadge + prodSel + nameFld + dirBadge +
+        '<button data-del="' + i + '" aria-label="종목 삭제" style="padding:0 10px;"><i class="ti ti-trash" style="font-size:16px;"></i></button>' +
+      '</div>' +
+      '<div class="grid-sm" style="margin-bottom:12px;">' + inputs + '</div>' +
+      '<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:12px;">' + big + '</div>' +
+      '<div style="margin-bottom:12px;">' +
+        '<label>진입 근거</label>' +
+        '<select data-i="' + i + '" data-k="reason">' +
+        REASONS.map((r, ri) => '<option value="' + ri + '"' + (p.reason === ri ? " selected" : "") + '>' + r + '</option>').join("") +
+        '</select>' +
+      '</div>' +
+      '<div style="border-top:1px solid var(--border); padding-top:10px; display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:0 24px;">' + results + '</div>' + warns;
+    box.appendChild(card);
+  });
+
+  if (shown === 0) {
+    box.innerHTML = '<div class="empty">이 카테고리에 종목이 없습니다. 아래 버튼으로 추가하세요.</div>';
+  }
+
+  const tabName = state.tab === "all" ? "전체" : state.tab === "coin" ? "코인" : "해외선물";
+  $("summary").innerHTML =
+    mcard("총자본", fmtMoney(state.capital) + " $") +
+    mcard(tabName + " 종목", shown + "개") +
+    mcard(tabName + " 리스크", "-" + fmtMoney(totRisk) + " $ (" + (state.capital > 0 ? Math.round(totRisk / state.capital * 1000) / 10 : 0) + "%)", "var(--red)") +
+    mcard(tabName + " 증거금", fmtMoney(totMargin) + " $", totMargin > state.capital ? "var(--red)" : null) +
+    mcard(tabName + " 목표 이익", "+" + fmtMoney(totProfit) + " $", "var(--green)");
+  save();
+}
+
+document.addEventListener("input", e => {
+  const t = e.target;
+  if (t.id === "g-capital") { state.capital = +t.value || 0; render(); return; }
+  if (t.id === "g-rr") { state.rr = +t.value || 3; state.positions.forEach(p => p.rr = state.rr); render(); return; }
+  const i = t.getAttribute("data-i");
+  if (i === null) return;
+  const p = state.positions[+i];
+  const k = t.getAttribute("data-k");
+  if (k === "name") { p.name = t.value; save(); return; }
+  if (["entry", "lev", "risk", "stop", "mgn"].indexOf(k) >= 0) p[k] = +t.value || 0;
+  render();
+  const again = document.querySelector('[data-i="' + i + '"][data-k="' + k + '"]');
+  if (again && again.tagName === "INPUT") again.focus();
+});
+
+document.addEventListener("change", e => {
+  const t = e.target;
+  if (t.id === "g-risk") { state.risk = +t.value; state.positions.forEach(p => p.risk = state.risk); render(); return; }
+  if (t.id === "g-stop") { state.stop = +t.value; state.positions.forEach(p => { if (p.cat === "coin") p.stop = state.stop; }); render(); return; }
+  const i = t.getAttribute("data-i");
+  if (i === null) return;
+  const p = state.positions[+i];
+  const k = t.getAttribute("data-k");
+  if (k === "dir") { p.dir = t.value; render(); }
+  if (k === "reason") { p.reason = +t.value; save(); }
+  if (k === "prod") {
+    p.prod = t.value;
+    const spec = prodOf(p);
+    if (spec.px > 0) p.entry = spec.px;
+    if (p.cat === "coin") { p.lev = spec.lev; p.stop = state.stop; }
+    else { p.mgn = spec.mgn; p.stop = spec.stop; }
+    render();
+  }
+});
+
+document.addEventListener("click", e => {
+  const tab = e.target.closest("[data-tab]");
+  if (tab) { state.tab = tab.getAttribute("data-tab"); render(); return; }
+  const del = e.target.closest("[data-del]");
+  if (del) { state.positions.splice(+del.getAttribute("data-del"), 1); render(); return; }
+  if (e.target.closest("#add-coin")) {
+    state.positions.push({ cat: "coin", prod: "BTC", name: "", dir: "long", entry: 62000, lev: 4, risk: state.risk, stop: state.stop, rr: state.rr, reason: 0, mgn: 0 });
+    if (state.tab === "fut") state.tab = "coin";
+    render();
+  }
+  if (e.target.closest("#add-fut")) {
+    state.positions.push({ cat: "fut", prod: "MNQ", name: "", dir: "long", entry: 25000, lev: 1, risk: state.risk, stop: 1.5, rr: state.rr, reason: 0, mgn: 2500 });
+    if (state.tab === "coin") state.tab = "fut";
+    render();
+  }
+});
+
+render();
+</script>
+</body>
+</html>
