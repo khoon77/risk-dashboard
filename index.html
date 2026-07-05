@@ -112,7 +112,7 @@ label { font-size: 12px; color: var(--muted); display: block; margin-bottom: 4px
   <div id="positions"></div>
   <div class="addbar" id="add-bar"></div>
 
-  <p class="footer">입력값은 이 브라우저에만 저장됩니다 · 개시증거금은 대략값이므로 사용 중인 증권사 값으로 수정하세요</p>
+  <p class="footer">입력값은 이 브라우저에만 저장됩니다 · 개시증거금은 대략값이므로 사용 중인 증권사 값으로 수정하세요 · v1.3</p>
 </div>
 
 <script>
@@ -368,14 +368,35 @@ function render() {
   save();
 }
 
+function handleSelect(t) {
+  if (t.id === "g-risk") { state.risk = +t.value; state.positions.forEach(p => p.risk = state.risk); render(); return; }
+  if (t.id === "g-stop") { state.stop = +t.value; state.positions.forEach(p => { if (p.cat === "coin") p.stop = state.stop; }); render(); return; }
+  const i = t.getAttribute("data-i");
+  if (i === null) return;
+  const p = state.positions[+i];
+  if (!p) return;
+  const k = t.getAttribute("data-k");
+  if (k === "dir" && p.dir !== t.value) { p.dir = t.value; render(); }
+  if (k === "reason") { p.reason = +t.value; save(); }
+  if (k === "prod" && p.prod !== t.value) {
+    p.prod = t.value;
+    const spec = prodOf(p);
+    if (spec.px > 0) p.entry = spec.px;
+    if (p.cat === "coin") { p.lev = spec.lev; p.stop = state.stop; }
+    else { p.mgn = spec.mgn; p.stop = spec.stop; }
+    render();
+  }
+}
+
 document.addEventListener("input", e => {
   const t = e.target;
-  if (t.tagName === "SELECT") return;
+  if (t.tagName === "SELECT") { handleSelect(t); return; }
   if (t.id === "g-capital") { state.capital = +t.value || 0; render(); return; }
   if (t.id === "g-rr") { state.rr = +t.value || 3; state.positions.forEach(p => p.rr = state.rr); render(); return; }
   const i = t.getAttribute("data-i");
   if (i === null) return;
   const p = state.positions[+i];
+  if (!p) return;
   const k = t.getAttribute("data-k");
   if (k === "name") { p.name = t.value; save(); return; }
   if (["entry", "lev", "risk", "stop", "mgn"].indexOf(k) >= 0) p[k] = +t.value || 0;
@@ -386,22 +407,7 @@ document.addEventListener("input", e => {
 
 document.addEventListener("change", e => {
   const t = e.target;
-  if (t.id === "g-risk") { state.risk = +t.value; state.positions.forEach(p => p.risk = state.risk); render(); return; }
-  if (t.id === "g-stop") { state.stop = +t.value; state.positions.forEach(p => { if (p.cat === "coin") p.stop = state.stop; }); render(); return; }
-  const i = t.getAttribute("data-i");
-  if (i === null) return;
-  const p = state.positions[+i];
-  const k = t.getAttribute("data-k");
-  if (k === "dir") { p.dir = t.value; render(); }
-  if (k === "reason") { p.reason = +t.value; save(); }
-  if (k === "prod") {
-    p.prod = t.value;
-    const spec = prodOf(p);
-    if (spec.px > 0) p.entry = spec.px;
-    if (p.cat === "coin") { p.lev = spec.lev; p.stop = state.stop; }
-    else { p.mgn = spec.mgn; p.stop = spec.stop; }
-    render();
-  }
+  if (t.tagName === "SELECT") handleSelect(t);
 });
 
 document.addEventListener("click", e => {
